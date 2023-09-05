@@ -1,5 +1,6 @@
 "use strict";
 import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
+import { qBittorrentClient} from "@robertklep/qbittorrent";
 
 export default class QBittorrentService extends Service {
 	// @ts-ignore
@@ -16,9 +17,18 @@ export default class QBittorrentService extends Service {
 				connect: {
 					rest: "POST /connect",
 					handler: async (ctx: Context<{}>) => {
-						return { foo: "bar" };
+						const torrentClient = new qBittorrentClient("http://192.168.1.183:8089", "admin", "adminadmin");
+						const info = await torrentClient.torrents.info();
+
+						return { foo: info };
 					},
 				},
+				getList : {
+					rest: "GET /getList",
+					handler: async (ctx: Context<{}>) => {
+
+					}
+				}
 			},
 			methods: {},
 		});
