@@ -1,6 +1,7 @@
 "use strict";
 import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
-import { qBittorrentClient} from "@robertklep/qbittorrent";
+import { qBittorrentClient } from "@robertklep/qbittorrent";
+const { MoleculerError } = require("moleculer").Errors;
 
 export default class QBittorrentService extends Service {
 	// @ts-ignore
@@ -14,23 +15,25 @@ export default class QBittorrentService extends Service {
 			mixins: [],
 			hooks: {},
 			actions: {
-				connect: {
-					rest: "POST /connect",
-					handler: async (ctx: Context<{}>) => {
-						const torrentClient = new qBittorrentClient("http://192.168.1.183:8089", "admin", "adminadmin");
-						const info = await torrentClient.torrents.info();
 
-						return { foo: info };
-					},
-				},
-				getList : {
-					rest: "GET /getList",
+				getList: {
+					rest: "GET /getTorrents",
 					handler: async (ctx: Context<{}>) => {
-
+						return await this.torrentClient.torrents.info()
 					}
 				}
-			},
-			methods: {},
+			}, methods: {},
+			async started(): Promise<any> {
+				try {
+					this.torrentClient = new qBittorrentClient("http://192.168.1.183:8089", "admin", "adminadmin");
+
+				} catch (err) {
+					throw new MoleculerError(err, 500, "QBITTORRENT_CONNECTION_ERROR", {
+						data: err,
+					});
+				}
+
+			}
 		});
 	}
 }
