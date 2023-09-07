@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "@robertklep/qbittorrent": "^1.0.1",
+    "axios": "^1.5.0",
     "ioredis": "^5.0.0",
     "moleculer": "^0.14.27",
     "moleculer-web": "^0.10.5"
