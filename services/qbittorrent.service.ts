@@ -16,14 +16,28 @@ export default class QBittorrentService extends Service {
 			actions: {
 				connect: {
 					rest: "POST /connect",
-					handler: async (ctx: Context<{}>) => {
-						const client = new qBittorrentClient(
-							"http://127.0.0.1:8080",
-							"admin",
-							"adminadmin",
+					handler: async (
+						ctx: Context<{
+							username: string;
+							password: string;
+							hostname: string;
+							port: string;
+							protocol: string;
+							name: string;
+						}>,
+					) => {
+						const { username, password, hostname, port, protocol } = ctx.params;
+						this.meta = new qBittorrentClient(
+							`${protocol}://${hostname}:${port}`,
+							`${username}`,
+							`${password}`,
 						);
-						console.log(client);
-						return { foo: "bar" };
+					},
+				},
+				getClientInfo: {
+					rest: "GET /getClientInfo",
+					handler: async (ctx: Context<{}>) => {
+						return await this.meta.app.buildInfo();
 					},
 				},
 			},
