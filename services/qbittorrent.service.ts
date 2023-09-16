@@ -37,8 +37,14 @@ export default class QBittorrentService extends Service {
 				getClientInfo: {
 					rest: "GET /getClientInfo",
 					handler: async (ctx: Context<{}>) => {
-						return await this.meta.app.buildInfo();
-					},
+						console.log(this.meta.app);
+						return {
+							buildInfo: await this.meta.app.buildInfo(),
+							version: await this.meta.app.version(),
+							webAPIVersion: await this.meta.app.webapiVersion(),
+						}
+					}
+
 				},
 			},
 			methods: {},
