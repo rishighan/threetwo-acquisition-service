@@ -42,9 +42,8 @@ export default class QBittorrentService extends Service {
 							buildInfo: await this.meta.app.buildInfo(),
 							version: await this.meta.app.version(),
 							webAPIVersion: await this.meta.app.webapiVersion(),
-						}
-					}
-
+						};
+					},
 				},
 			},
 			methods: {},
