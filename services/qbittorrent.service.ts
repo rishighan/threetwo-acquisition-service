@@ -1,6 +1,8 @@
 "use strict";
 import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
 import { qBittorrentClient } from "@robertklep/qbittorrent";
+import parseTorrent from "parse-torrent";
+import { readFileSync, writeFileSync } from "fs";
 
 export default class QBittorrentService extends Service {
 	// @ts-ignore
@@ -32,6 +34,7 @@ export default class QBittorrentService extends Service {
 							`${username}`,
 							`${password}`,
 						);
+						console.log(this.meta);
 					},
 				},
 				getClientInfo: {
@@ -43,6 +46,46 @@ export default class QBittorrentService extends Service {
 							version: await this.meta.app.version(),
 							webAPIVersion: await this.meta.app.webapiVersion(),
 						};
+					},
+				},
+				addTorrent: {
+					rest: "POST /addTorrent",
+					handler: async (
+						ctx: Context<{
+							torrentToDownload: any;
+							comicObjectId: string;
+						}>,
+					) => {
+						try {
+							const { torrentToDownload } = ctx.params;
+							console.log(torrentToDownload);
+							const response = await fetch(torrentToDownload, {
+								method: "GET",
+							});
+							const buffer = await response.arrayBuffer();
+							writeFileSync(`mithrandir.torrent`, Buffer.from(buffer));
+
+							const result = await this.meta.torrents.add({
+								torrents: {
+									buffer: readFileSync("mithrandir.torrent"),
+								},
+								// start this torrent in a paused state (see Torrent type for options)
+								paused: true,
+							});
+
+							return {
+								result,
+								metadata: parseTorrent(readFileSync("mithrandir.torrent")),
+							};
+						} catch (err) {
+							console.error(err);
+						}
+					},
+				},
+				getTorrents: {
+					rest: "POST /getTorrents",
+					handler: async (ctx: Context<{}>) => {
+						return await this.meta.torrents.info();
 					},
 				},
 			},

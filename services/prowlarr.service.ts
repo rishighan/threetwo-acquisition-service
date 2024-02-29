@@ -59,8 +59,8 @@ export default class ProwlarrService extends Service {
 							apiKey: string;
 							query: string;
 							type: string;
-							indexerIds: string;
-							categories: string;
+							indexerIds: [number];
+							categories: [number];
 							limit: number;
 							offset: number;
 						}>,
@@ -77,19 +77,14 @@ export default class ProwlarrService extends Service {
 							offset,
 						} = ctx.params;
 
-						const indexers = indexerIds.split(",").map((index) => parseInt(index, 10));
-						const searchCategories = categories
-							.split(",")
-							.map((category) => parseInt(category, 10));
-
 						const result = await axios({
 							url: `http://${host}:${port}/api/v1/search`,
 							method: "GET",
 							params: {
 								query,
 								type,
-								indexers,
-								searchCategories,
+								indexerIds,
+								categories,
 								limit,
 								offset,
 							},
@@ -98,7 +93,6 @@ export default class ProwlarrService extends Service {
 								"X-Api-Key": `${apiKey}`,
 							},
 						});
-						console.log(result);
 						return result.data;
 					},
 				},
