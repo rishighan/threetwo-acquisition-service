@@ -57,14 +57,15 @@ export default class QBittorrentService extends Service {
 						}>,
 					) => {
 						try {
-							const { torrentToDownload } = ctx.params;
+							const { torrentToDownload, comicObjectId } = ctx.params;
 							console.log(torrentToDownload);
 							const response = await fetch(torrentToDownload, {
 								method: "GET",
 							});
+							// Read the buffer to a file
 							const buffer = await response.arrayBuffer();
 							writeFileSync(`mithrandir.torrent`, Buffer.from(buffer));
-
+							// Add the torrent to qbittorrent's queue, paused.
 							const result = await this.meta.torrents.add({
 								torrents: {
 									buffer: readFileSync("mithrandir.torrent"),
@@ -72,10 +73,18 @@ export default class QBittorrentService extends Service {
 								// start this torrent in a paused state (see Torrent type for options)
 								paused: true,
 							});
-
+							const { name, infoHash, announce } = parseTorrent(
+								readFileSync("mithrandir.torrent"),
+							);
+							await this.broker.call("library.applyTorrentDownloadMetadata", {
+								name,
+								torrentToDownload,
+								comicObjectId,
+								announce,
+								infoHash,
+							});
 							return {
 								result,
-								metadata: parseTorrent(readFileSync("mithrandir.torrent")),
 							};
 						} catch (err) {
 							console.error(err);
