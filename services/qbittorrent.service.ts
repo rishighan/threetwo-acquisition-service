@@ -1,15 +1,12 @@
-"use strict";
-import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
-import { qBittorrentClient } from "@robertklep/qbittorrent";
-import parseTorrent from "parse-torrent";
 import { readFileSync, writeFileSync } from "fs";
+import { qBittorrentClient } from "@robertklep/qbittorrent";
+import type { Context, ServiceBroker, ServiceSchema } from "moleculer";
+import { Errors, Service } from "moleculer";
+import parseTorrent from "parse-torrent";
 
 export default class QBittorrentService extends Service {
 	// @ts-ignore
-	public constructor(
-		public broker: ServiceBroker,
-		schema: ServiceSchema<{}> = { name: "qbittorrent" },
-	) {
+	constructor(public broker: ServiceBroker, schema: ServiceSchema<{}> = { name: "qbittorrent" }) {
 		super(broker);
 		this.parseServiceSchema({
 			name: "qbittorrent",
@@ -93,8 +90,16 @@ export default class QBittorrentService extends Service {
 				},
 				getTorrents: {
 					rest: "POST /getTorrents",
-					handler: async (ctx: Context<{}>) => {
-						return await this.meta.torrents.info();
+					handler: async (ctx: Context<{}>) => await this.meta.torrents.info(),
+				},
+				getTorrentDetails: {
+					rest: "POST /getTorrentDetails",
+					handler: async (ctx: Context<{ infoHashes: [string] }>) => {
+						const infoHashes = Object.values(ctx.params);
+						const torrentDetails = infoHashes.map(async (infoHash) => {
+							return await this.meta.torrents.properties(infoHash);
+						});
+						return Promise.all(torrentDetails);
 					},
 				},
 			},
