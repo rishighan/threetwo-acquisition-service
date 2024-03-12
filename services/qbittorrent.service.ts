@@ -12,6 +12,7 @@ export default class QBittorrentService extends Service {
 			name: "qbittorrent",
 			mixins: [],
 			hooks: {},
+			settings: {},
 			actions: {
 				connect: {
 					rest: "POST /connect",
@@ -26,12 +27,16 @@ export default class QBittorrentService extends Service {
 						}>,
 					) => {
 						const { username, password, hostname, port, protocol } = ctx.params;
+
 						this.meta = new qBittorrentClient(
 							`${protocol}://${hostname}:${port}`,
 							`${username}`,
 							`${password}`,
 						);
 						console.log(this.meta);
+						if (this.meta) {
+							return { success: true, message: "Logged in successfully" };
+						}
 					},
 				},
 				getClientInfo: {
@@ -102,8 +107,28 @@ export default class QBittorrentService extends Service {
 						return Promise.all(torrentDetails);
 					},
 				},
+				checkForDeletedTorrents: {
+					rest: "GET /checkForDeletedTorrents",
+					handler: async (ctx: Context<{ infoHashes: [string] }>) => {
+						await this.broker.call("qbittorrent.connect", {
+							hostname: "localhost",
+							protocol: "http",
+							port: "8080",
+							username: "admin",
+							password: "password",
+						});
+						const torrents: any = await this.broker.call("qbittorrent.getTorrents", {});
+						const deletedTorrents = this.detectDeletedTorrents(
+							torrents.map((torrent: any) => torrent.hash),
+						);
+						return deletedTorrents;
+					},
+				},
 			},
-			methods: {},
+			methods: {
+				detectDeletedTorrents(currentHashes) {},
+			},
+			async started() {},
 		});
 	}
 }
