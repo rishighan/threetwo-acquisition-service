@@ -14,6 +14,14 @@ export default class QBittorrentService extends Service {
 			hooks: {},
 			settings: {},
 			actions: {
+				fetchQbittorrentCredentials: {
+					rest: "GET /fetchQbittorrentCredentials",
+					handler: async (ctx: Context<{}>) => {
+						return await this.broker.call("settings.getSettings", {
+							settingsKey: "bittorrent",
+						});
+					},
+				},
 				connect: {
 					rest: "POST /connect",
 					handler: async (
@@ -23,7 +31,7 @@ export default class QBittorrentService extends Service {
 							hostname: string;
 							port: string;
 							protocol: string;
-							name: string;
+							name?: string;
 						}>,
 					) => {
 						const { username, password, hostname, port, protocol } = ctx.params;
@@ -39,10 +47,43 @@ export default class QBittorrentService extends Service {
 						}
 					},
 				},
+				loginWithStoredCredentials: {
+					rest: "POST /loginWithStoredCredentials",
+					handler: async (ctx: Context<{}>) => {
+						try {
+							const result: any = await this.broker.call(
+								"qbittorrent.fetchQbittorrentCredentials",
+								{},
+							);
+							if (result !== undefined) {
+								const {
+									client: {
+										host: { username, password, hostname, port, protocol },
+									},
+								} = result;
+								return await this.broker.call("qbittorrent.connect", {
+									username,
+									password,
+									hostname,
+									port,
+									protocol,
+								});
+							}
+						} catch (err) {
+							return {
+								error: err,
+								message:
+									"Qbittorrent credentials not found, please configure them in Settings.",
+							};
+						}
+					},
+				},
+
 				getClientInfo: {
 					rest: "GET /getClientInfo",
 					handler: async (ctx: Context<{}>) => {
 						console.log(this.meta.app);
+						await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
 						return {
 							buildInfo: await this.meta.app.buildInfo(),
 							version: await this.meta.app.version(),
@@ -59,6 +100,7 @@ export default class QBittorrentService extends Service {
 						}>,
 					) => {
 						try {
+							await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
 							const { torrentToDownload, comicObjectId } = ctx.params;
 							console.log(torrentToDownload);
 							const response = await fetch(torrentToDownload, {
@@ -95,11 +137,15 @@ export default class QBittorrentService extends Service {
 				},
 				getTorrents: {
 					rest: "POST /getTorrents",
-					handler: async (ctx: Context<{}>) => await this.meta.torrents.info(),
+					handler: async (ctx: Context<{}>) => {
+						await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
+						return await this.meta.torrents.info();
+					},
 				},
 				getTorrentDetails: {
 					rest: "POST /getTorrentDetails",
 					handler: async (ctx: Context<{ infoHashes: [string] }>) => {
+						await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
 						const infoHashes = Object.values(ctx.params);
 						const torrentDetails = infoHashes.map(async (infoHash) => {
 							return await this.meta.torrents.properties(infoHash);
@@ -110,13 +156,7 @@ export default class QBittorrentService extends Service {
 				checkForDeletedTorrents: {
 					rest: "GET /checkForDeletedTorrents",
 					handler: async (ctx: Context<{ infoHashes: [string] }>) => {
-						await this.broker.call("qbittorrent.connect", {
-							hostname: "localhost",
-							protocol: "http",
-							port: "8080",
-							username: "admin",
-							password: "password",
-						});
+						await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
 						const torrents: any = await this.broker.call("qbittorrent.getTorrents", {});
 						const deletedTorrents = this.detectDeletedTorrents(
 							torrents.map((torrent: any) => torrent.hash),
