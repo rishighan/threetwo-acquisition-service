@@ -61,13 +61,17 @@ export default class QBittorrentService extends Service {
 										host: { username, password, hostname, port, protocol },
 									},
 								} = result;
-								return await this.broker.call("qbittorrent.connect", {
+
+								const connection = await this.broker.call("qbittorrent.connect", {
 									username,
 									password,
 									hostname,
 									port,
 									protocol,
 								});
+								console.log("qbittorrent connection details:");
+								console.log(JSON.stringify(connection, null, 4));
+								return connection;
 							}
 						} catch (err) {
 							return {
@@ -142,32 +146,39 @@ export default class QBittorrentService extends Service {
 						return await this.meta.torrents.info();
 					},
 				},
-				getTorrentDetails: {
-					rest: "POST /getTorrentDetails",
-					handler: async (ctx: Context<{ infoHashes: [string] }>) => {
-						await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
-						const infoHashes = Object.values(ctx.params);
-						const torrentDetails = infoHashes.map(async (infoHash) => {
-							return await this.meta.torrents.properties(infoHash);
-						});
-						return Promise.all(torrentDetails);
+				getTorrentProperties: {
+					rest: "POST /getTorrentProperties",
+					handler: async (ctx: Context<{ infoHashes: string[] }>) => {
+						try {
+							const { infoHashes } = ctx.params;
+							await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
+							return await this.meta.torrents.info({
+								hashes: infoHashes,
+							});
+						} catch (err) {
+							console.error("An error occurred:", err);
+							// Consider handling the error more gracefully here, possibly returning an error response
+							throw err; // or return a specific error object/message
+						}
 					},
 				},
-				checkForDeletedTorrents: {
-					rest: "GET /checkForDeletedTorrents",
-					handler: async (ctx: Context<{ infoHashes: [string] }>) => {
+				getTorrentRealTimeStats: {
+					rest: "POST /getTorrentRealTimeStats",
+					handler: async (
+						ctx: Context<{ infoHashes: { _id: string; infoHashes: string[] }[] }>,
+					) => {
 						await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
-						const torrents: any = await this.broker.call("qbittorrent.getTorrents", {});
-						const deletedTorrents = this.detectDeletedTorrents(
-							torrents.map((torrent: any) => torrent.hash),
-						);
-						return deletedTorrents;
+
+						try {
+							return await this.meta.sync.maindata(1);
+						} catch (err) {
+							this.logger.error(err);
+							throw err;
+						}
 					},
 				},
 			},
-			methods: {
-				detectDeletedTorrents(currentHashes) {},
-			},
+			methods: {},
 			async started() {},
 		});
 	}
