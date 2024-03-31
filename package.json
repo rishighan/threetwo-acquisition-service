@@ -1,7 +1,7 @@
 {
   "name": "threetwo-acquisition-service",
   "version": "1.0.0",
-  "description": "",
+  "description": "My Moleculer-based microservices project",
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "dev": "ts-node ./node_modules/moleculer/bin/moleculer-runner.js --config moleculer.config.ts --hot --repl services/**/*.service.ts",
@@ -19,13 +19,15 @@
     "microservices",
     "moleculer"
   ],
-  "author": "Rishi Ghan",
+  "author": "",
   "devDependencies": {
     "@jest/globals": "^29.3.1",
     "@types/jest": "^29.2.3",
     "@types/node": "^18.11.9",
+    "@types/parse-torrent": "^5.8.7",
     "@typescript-eslint/eslint-plugin": "^5.44.0",
     "@typescript-eslint/parser": "^5.44.0",
+    "axios": "^1.5.0",
     "concurrently": "^7.6.0",
     "cross-env": "^7.0.3",
     "eslint": "^8.28.0",
@@ -37,6 +39,7 @@
     "jest": "^29.3.1",
     "moleculer-repl": "^0.7.3",
     "prettier": "^2.8.0",
+    "qbittorrent-api-v2": "^1.2.2",
     "ts-jest": "^29.0.3",
     "ts-node": "^10.9.1",
     "typescript": "^4.9.3"
@@ -45,9 +48,10 @@
     "@robertklep/qbittorrent": "^1.0.1",
     "ioredis": "^5.0.0",
     "moleculer": "^0.14.27",
-    "moleculer-web": "^0.10.5"
+    "moleculer-web": "^0.10.5",
+    "parse-torrent": "^9.1.5"
   },
   "engines": {
-    "node": ">= 20.x.x"
+    "node": ">= 16.x.x"
   }
 }
