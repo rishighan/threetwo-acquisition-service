@@ -86,7 +86,6 @@ export default class QBittorrentService extends Service {
 				getClientInfo: {
 					rest: "GET /getClientInfo",
 					handler: async (ctx: Context<{}>) => {
-						console.log(this.meta.app);
 						await this.broker.call("qbittorrent.loginWithStoredCredentials", {});
 						return {
 							buildInfo: await this.meta.app.buildInfo(),
@@ -210,6 +209,20 @@ export default class QBittorrentService extends Service {
 							this.logger.error(err);
 							throw err;
 						}
+					},
+				},
+				determineDownloadApps: {
+					rest: "",
+					handler: async () => {
+						// 1. Parse the incoming search query
+						// to make sure that it is well-formed
+						// At the very least, it should have name, year, number
+						// 2. Choose between download mediums based on user-preference?
+						// possible choices are: DC++, Torrent
+						// 3. Perform the search on those media with the aforementioned search query
+						// 4. Choose a subset of relevant search results,
+						// and score them
+						// 5. Download the highest-scoring, relevant result
 					},
 				},
 			},

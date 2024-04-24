@@ -65,6 +65,7 @@ export default class ProwlarrService extends Service {
 							offset: number;
 						}>,
 					) => {
+						console.log(JSON.stringify(ctx.params, null, 2));
 						const {
 							indexerIds,
 							categories,
@@ -76,15 +77,16 @@ export default class ProwlarrService extends Service {
 							limit,
 							offset,
 						} = ctx.params;
-
+						const indexer = indexerIds[0] ? indexerIds.length === 1 : indexerIds;
+						const category = categories[0] ? categories.length === 1 : categories;
 						const result = await axios({
 							url: `http://${host}:${port}/api/v1/search`,
 							method: "GET",
 							params: {
 								query,
 								type,
-								indexerIds,
-								categories,
+								indexer,
+								category,
 								limit,
 								offset,
 							},
