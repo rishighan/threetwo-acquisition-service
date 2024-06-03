@@ -2,6 +2,25 @@
 import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
 import { Kafka } from "kafkajs";
 
+interface Comic {
+	wanted: {
+		markEntireVolumeWanted?: boolean;
+		issues?: Array<any>;
+		volume: {
+			id: string;
+			name: string;
+		};
+	};
+}
+
+interface PaginatedResult {
+	wantedComics: Comic[];
+	total: number;
+	page: number;
+	limit: number;
+	pages: number;
+}
+
 export default class AutoDownloadService extends Service {
 	private kafkaProducer: any;
 
@@ -18,35 +37,60 @@ export default class AutoDownloadService extends Service {
 					rest: "POST /searchWantedComics",
 					handler: async (ctx: Context<{}>) => {
 						try {
-							const wantedComics: any = await this.broker.call(
-								"library.getComicsMarkedAsWanted",
-								{},
-							);
-							this.logger.info("Fetched wanted comics:", wantedComics.length);
+							let page = 1;
+							const limit = this.BATCH_SIZE;
 
-							for (const comic of wantedComics) {
-								if (comic.wanted.markEntireVolumeWanted) {
-									const issues: any = await this.broker.call(
-										"comicvine.getIssuesForVolume",
-										{
-											volumeId: comic.wanted.volume.id,
-										},
+							while (true) {
+								const result: PaginatedResult = await this.broker.call(
+									"library.getComicsMarkedAsWanted",
+									{ page, limit },
+								);
+
+								if (!result || !result.wantedComics) {
+									this.logger.error("Invalid response structure", result);
+									throw new Errors.MoleculerError(
+										"Invalid response structure from getComicsMarkedAsWanted",
+										500,
+										"INVALID_RESPONSE_STRUCTURE",
 									);
-									for (const issue of issues) {
-										await this.produceJobToKafka(
-											comic.wanted.volume.name,
-											issue,
+								}
+
+								this.logger.info(
+									`Fetched ${result.wantedComics.length} comics from page ${page} of ${result.pages}`,
+								);
+
+								for (const comic of result.wantedComics) {
+									if (comic.wanted.markEntireVolumeWanted) {
+										const issues: any = await this.broker.call(
+											"comicvine.getIssuesForVolume",
+											{
+												volumeId: comic.wanted.volume.id,
+											},
 										);
-									}
-								} else if (comic.wanted.issues && comic.wanted.issues.length > 0) {
-									for (const issue of comic.wanted.issues) {
-										await this.produceJobToKafka(
-											comic.wanted.volume?.name,
-											issue,
-										);
+										for (const issue of issues) {
+											await this.produceJobToKafka(
+												comic.wanted.volume.name,
+												issue,
+											);
+										}
+									} else if (
+										comic.wanted.issues &&
+										comic.wanted.issues.length > 0
+									) {
+										for (const issue of comic.wanted.issues) {
+											await this.produceJobToKafka(
+												comic.wanted.volume?.name,
+												issue,
+											);
+										}
 									}
 								}
+
+								if (page >= result.pages) break;
+								page += 1;
 							}
+
+							return { success: true, message: "Processing started." };
 						} catch (error) {
 							this.logger.error("Error in searchWantedComics:", error);
 							throw new Errors.MoleculerError(

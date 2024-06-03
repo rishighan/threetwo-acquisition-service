@@ -3,7 +3,20 @@ import { Service, ServiceBroker, ServiceSchema } from "moleculer";
 import { Kafka, EachMessagePayload, logLevel } from "kafkajs";
 import { isUndefined } from "lodash";
 import io from "socket.io-client";
+interface SearchResult {
+	result: {
+		id: string;
+		// Add other relevant fields
+	};
+	search_id: string;
+	// Add other relevant fields
+}
 
+interface SearchResultPayload {
+	groupedResult: SearchResult;
+	updatedResult: SearchResult;
+	instanceId: string;
+}
 export default class ComicProcessorService extends Service {
 	private kafkaConsumer: any;
 	private socketIOInstance: any;
@@ -136,35 +149,55 @@ export default class ComicProcessorService extends Service {
 					this.logger.info("Socket.IO connected successfully.");
 				});
 
-				this.socketIOInstance.on("searchResultAdded", (data: any) => {
-					this.logger.info(
-						"Received search result added:",
-						JSON.stringify(data, null, 4),
-					);
-					this.airDCPPSearchResults.push(data);
-				});
-
-				this.socketIOInstance.on("searchResultUpdated", async (data: any) => {
-					this.logger.info(
-						"Received search result update:",
-						JSON.stringify(data, null, 4),
-					);
-					if (
-						!isUndefined(data.result) &&
-						!isUndefined(this.airDCPPSearchResults.result)
-					) {
-						const toReplaceIndex = this.airDCPPSearchResults.findIndex(
-							(element: any) => {
-								return element?.result.id === data.result.id;
-							},
+				this.socketIOInstance.on(
+					"searchResultAdded",
+					({ groupedResult, instanceId }: SearchResultPayload) => {
+						this.logger.info(
+							"Received search result added:",
+							JSON.stringify(groupedResult, null, 4),
 						);
-						this.airDCPPSearchResults[toReplaceIndex] = data.result;
-					}
-				});
+						this.airDCPPSearchResults.push({
+							groupedResult: groupedResult.result,
+							instanceId,
+						});
+					},
+				);
+
+				this.socketIOInstance.on(
+					"searchResultUpdated",
+					async ({ updatedResult, instanceId }: SearchResultPayload) => {
+						this.logger.info(
+							"Received search result update:",
+							JSON.stringify(updatedResult, null, 4),
+						);
+						if (
+							!isUndefined(updatedResult.result) &&
+							!isUndefined(this.airDCPPSearchResults.result)
+						) {
+							const toReplaceIndex = this.airDCPPSearchResults.findIndex(
+								(element: any) => {
+									return element?.result.id === updatedResult.result.id;
+								},
+							);
+							this.airDCPPSearchResults[toReplaceIndex] = {
+								result: updatedResult.result,
+								instanceId,
+							};
+						}
+					},
+				);
 				this.socketIOInstance.on("searchComplete", async () => {
 					// Ensure results are not empty before producing to Kafka
 					if (this.airDCPPSearchResults.length > 0) {
-						await this.produceResultsToKafka(this.airDCPPSearchResults, []);
+						const results = this.airDCPPSearchResults.reduce((acc: any, item: any) => {
+							const key = item.instanceId;
+							if (!acc[key]) {
+								acc[key] = [];
+							}
+							acc[key].push(item);
+							return acc;
+						}, {});
+						await this.produceResultsToKafka(results, []);
 					} else {
 						this.logger.warn(
 							"AirDC++ search results are empty, not producing to Kafka.",
