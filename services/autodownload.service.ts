@@ -1,8 +1,29 @@
 "use strict";
 import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
-import axios from "axios";
+import { Kafka } from "kafkajs";
+
+interface Comic {
+	wanted: {
+		markEntireVolumeWanted?: boolean;
+		issues?: Array<any>;
+		volume: {
+			id: string;
+			name: string;
+		};
+	};
+}
+
+interface PaginatedResult {
+	wantedComics: Comic[];
+	total: number;
+	page: number;
+	limit: number;
+	pages: number;
+}
 
 export default class AutoDownloadService extends Service {
+	private kafkaProducer: any;
+
 	// @ts-ignore
 	public constructor(
 		public broker: ServiceBroker,
@@ -11,58 +32,100 @@ export default class AutoDownloadService extends Service {
 		super(broker);
 		this.parseServiceSchema({
 			name: "autodownload",
-			mixins: [],
-			hooks: {},
 			actions: {
 				searchWantedComics: {
 					rest: "POST /searchWantedComics",
 					handler: async (ctx: Context<{}>) => {
-						// 1.iterate through the wanted comic objects, and:
-						// 1a. Orchestrate all issues from ComicVine if the entire volume is wanted
-						// 1b. Just the issues in "wanted.issues[]"
-						const wantedComics: any = await this.broker.call(
-							"library.getComicsMarkedAsWanted",
-							{},
-						);
+						try {
+							let page = 1;
+							const limit = this.BATCH_SIZE;
 
-						// Iterate through the list of wanted comics
-						for (const comic of wantedComics) {
-							let issuesToSearch: any = [];
-
-							if (comic.wanted.markEntireVolumeAsWanted) {
-								// 1a. Fetch all issues from ComicVine if the entire volume is wanted
-								issuesToSearch = await this.broker.call(
-									"comicvine.getIssuesForVolume",
-									{
-										volumeId: comic.wanted.volume.id,
-									},
+							while (true) {
+								const result: PaginatedResult = await this.broker.call(
+									"library.getComicsMarkedAsWanted",
+									{ page, limit },
 								);
-							} else if (comic.wanted.issues && comic.wanted.issues.length > 0) {
-								// 1b. Just the issues in "wanted.issues[]"
-								issuesToSearch = comic.wanted.issues;
+
+								if (!result || !result.wantedComics) {
+									this.logger.error("Invalid response structure", result);
+									throw new Errors.MoleculerError(
+										"Invalid response structure from getComicsMarkedAsWanted",
+										500,
+										"INVALID_RESPONSE_STRUCTURE",
+									);
+								}
+
+								this.logger.info(
+									`Fetched ${result.wantedComics.length} comics from page ${page} of ${result.pages}`,
+								);
+
+								for (const comic of result.wantedComics) {
+									if (comic.wanted.markEntireVolumeWanted) {
+										const issues: any = await this.broker.call(
+											"comicvine.getIssuesForVolume",
+											{
+												volumeId: comic.wanted.volume.id,
+											},
+										);
+										for (const issue of issues) {
+											await this.produceJobToKafka(
+												comic.wanted.volume.name,
+												issue,
+											);
+										}
+									} else if (
+										comic.wanted.issues &&
+										comic.wanted.issues.length > 0
+									) {
+										for (const issue of comic.wanted.issues) {
+											await this.produceJobToKafka(
+												comic.wanted.volume?.name,
+												issue,
+											);
+										}
+									}
+								}
+
+								if (page >= result.pages) break;
+								page += 1;
 							}
-							for (const issue of issuesToSearch) {
-								// construct the search queries
-							}
+
+							return { success: true, message: "Processing started." };
+						} catch (error) {
+							this.logger.error("Error in searchWantedComics:", error);
+							throw new Errors.MoleculerError(
+								"Failed to search wanted comics.",
+								500,
+								"SEARCH_WANTED_COMICS_ERROR",
+								{ error },
+							);
 						}
 					},
 				},
-				determineDownloadChannel: {
-					rest: "POST /determineDownloadChannel",
-					handler: async (ctx: Context<{}>) => {
-						// 1. Parse the incoming search query
-						// to make sure that it is well-formed
-						// At the very least, it should have name, year, number
-						// 2. Choose between download mediums based on user-preference?
-						// possible choices are: DC++, Torrent
-						// 3. Perform the search on those media with the aforementioned search query
-						// 4. Choose a subset of relevant search results,
-						// and score them
-						// 5. Download the highest-scoring, relevant result
-					},
+			},
+			methods: {
+				produceJobToKafka: async (volumeName: string, issue: any) => {
+					const job = { volumeName, issue };
+					await this.kafkaProducer.send({
+						topic: "comic-search-jobs",
+						messages: [{ value: JSON.stringify(job) }],
+					});
+					this.logger.info("Produced job to Kafka:", job);
 				},
 			},
-			methods: {},
+			async started() {
+				const kafka = new Kafka({
+					clientId: "comic-search-service",
+					brokers: ["localhost:9092"],
+				});
+				this.kafkaProducer = kafka.producer();
+				await this.kafkaProducer.connect();
+				this.logger.info("Kafka producer connected successfully.");
+			},
+			async stopped() {
+				await this.kafkaProducer.disconnect();
+				this.logger.info("Kafka producer disconnected successfully.");
+			},
 		});
 	}
 }
