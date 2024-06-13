@@ -47,6 +47,12 @@ export default class ComicProcessorService extends Service {
 				processJob: async (job: any) => {
 					try {
 						this.logger.info("Processing job:", JSON.stringify(job, null, 2));
+						// Get the hub to search on
+						const settings: any = await this.broker.call("settings.getSettings", {
+							settingsKey: "directConnect",
+						});
+						const hubs = settings.client.hubs.map((hub: any) => hub.value);
+
 						const { comic } = job;
 						const { volume, issues, markEntireVolumeWanted } = comic.wanted;
 
@@ -67,18 +73,15 @@ export default class ComicProcessorService extends Service {
 						}
 
 						for (const issue of this.issuesToSearch) {
-							// issue number
-							const inferredIssueNumber = issue.issueNumber
-								? issue.issueNumber
-								: issue.issue_number;
-							// year
+							// Query builder for DC++
+							// 1. issue number
+							const inferredIssueNumber =
+								issue.issueNumber || issue.issue_number || "";
+							// 2. year
 							const { year } = this.parseStringDate(issue.coverDate);
-							const inferredYear = year ? issue?.coverDate : issue.year;
+							const inferredYear = year || issue.year || "";
 
-							const settings: any = await this.broker.call("settings.getSettings", {
-								settingsKey: "directConnect",
-							});
-							const hubs = settings.client.hubs.map((hub: any) => hub.value);
+							// 3. Orchestrate the query
 							const dcppSearchQuery = {
 								query: {
 									pattern: `${volume.name.replace(
