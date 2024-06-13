@@ -13,16 +13,9 @@ interface Comic {
 	};
 }
 
-interface PaginatedResult {
-	wantedComics: Comic[];
-	total: number;
-	page: number;
-	limit: number;
-	pages: number;
-}
-
 export default class AutoDownloadService extends Service {
 	private kafkaProducer: any;
+	private readonly BATCH_SIZE = 100; // Adjust based on your system capacity
 
 	// @ts-ignore
 	public constructor(
@@ -41,13 +34,23 @@ export default class AutoDownloadService extends Service {
 							const limit = this.BATCH_SIZE;
 
 							while (true) {
-								const result: PaginatedResult = await this.broker.call(
+								const comics: Comic[] = await this.broker.call(
 									"library.getComicsMarkedAsWanted",
 									{ page, limit },
 								);
 
-								if (!result || !result.wantedComics) {
-									this.logger.error("Invalid response structure", result);
+								// Log the entire result object for debugging
+								this.logger.info(
+									"Received comics from getComicsMarkedAsWanted:",
+									JSON.stringify(comics, null, 2),
+								);
+
+								// Check if result structure is correct
+								if (!Array.isArray(comics)) {
+									this.logger.error(
+										"Invalid response structure",
+										JSON.stringify(comics, null, 2),
+									);
 									throw new Errors.MoleculerError(
 										"Invalid response structure from getComicsMarkedAsWanted",
 										500,
@@ -56,41 +59,22 @@ export default class AutoDownloadService extends Service {
 								}
 
 								this.logger.info(
-									`Fetched ${result.wantedComics.length} comics from page ${page} of ${result.pages}`,
+									`Fetched ${comics.length} comics from page ${page}`,
 								);
 
-								for (const comic of result.wantedComics) {
-									if (comic.wanted.markEntireVolumeWanted) {
-										const issues: any = await this.broker.call(
-											"comicvine.getIssuesForVolume",
-											{
-												volumeId: comic.wanted.volume.id,
-											},
-										);
-										for (const issue of issues) {
-											await this.produceJobToKafka(
-												comic.wanted.volume.name,
-												issue,
-											);
-										}
-									} else if (
-										comic.wanted.issues &&
-										comic.wanted.issues.length > 0
-									) {
-										for (const issue of comic.wanted.issues) {
-											await this.produceJobToKafka(
-												comic.wanted.volume?.name,
-												issue,
-											);
-										}
-									}
+								// Enqueue the jobs in batches
+								for (const comic of comics) {
+									await this.produceJobToKafka(comic);
 								}
 
-								if (page >= result.pages) break;
+								if (comics.length < limit) break; // End loop if fewer comics than the limit were fetched
 								page += 1;
 							}
 
-							return { success: true, message: "Processing started." };
+							return {
+								success: true,
+								message: "Jobs enqueued for background processing.",
+							};
 						} catch (error) {
 							this.logger.error("Error in searchWantedComics:", error);
 							throw new Errors.MoleculerError(
@@ -104,13 +88,17 @@ export default class AutoDownloadService extends Service {
 				},
 			},
 			methods: {
-				produceJobToKafka: async (volumeName: string, issue: any) => {
-					const job = { volumeName, issue };
-					await this.kafkaProducer.send({
-						topic: "comic-search-jobs",
-						messages: [{ value: JSON.stringify(job) }],
-					});
-					this.logger.info("Produced job to Kafka:", job);
+				produceJobToKafka: async (comic: Comic) => {
+					const job = { comic };
+					try {
+						await this.kafkaProducer.send({
+							topic: "comic-search-jobs",
+							messages: [{ value: JSON.stringify(job) }],
+						});
+						this.logger.info("Produced job to Kafka:", job);
+					} catch (error) {
+						this.logger.error("Error producing job to Kafka:", error);
+					}
 				},
 			},
 			async started() {
