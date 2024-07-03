@@ -136,10 +136,10 @@ export default class ComicProcessorService extends Service {
 						this.logger.error("Error processing job:", error);
 					}
 				},
-				produceResultsToKafka: async () => {
+				produceResultsToKafka: async (query: string) => {
 					try {
 						/*
-							Kafka messages need to be in a format that can be serialized to JSON, and a Map is not directly serializable in a way that retains its structure, hence we use Object.fromEntries
+							Kafka messages need to be in a format that can be serialized to JSON, and a Map is not directly serializable in a way that retains its structure, hence why we use Object.fromEntries
 						*/
 						await this.kafkaProducer.send({
 							topic: "comic-search-results",
@@ -159,7 +159,8 @@ export default class ComicProcessorService extends Service {
 							event: "searchResultsAvailable",
 							args: [
 								{
-									bokya: Object.fromEntries(this.airDCPPSearchResults),
+									query,
+									results: Object.fromEntries(this.airDCPPSearchResults),
 								},
 							],
 						});
@@ -259,7 +260,7 @@ export default class ComicProcessorService extends Service {
 					this.logger.info(
 						`Search complete for query: "${data.searchInfo.query.pattern}"`,
 					);
-					await this.produceResultsToKafka();
+					await this.produceResultsToKafka(data.searchInfo.query.pattern);
 				});
 			},
 			async stopped() {
