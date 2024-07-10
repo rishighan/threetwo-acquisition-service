@@ -44,6 +44,7 @@ export default class ComicProcessorService extends Service {
 						day: date.getDate(),
 					};
 				},
+				rankSearchResults: (results, query: string) => {},
 				processJob: async (job: any) => {
 					try {
 						this.logger.info("Processing job:", JSON.stringify(job, null, 2));
@@ -138,6 +139,10 @@ export default class ComicProcessorService extends Service {
 				},
 				produceResultsToKafka: async (query: string) => {
 					try {
+						/*
+							Match and rank
+						*/
+
 						/*
 							Kafka messages need to be in a format that can be serialized to JSON, and a Map is not directly serializable in a way that retains its structure, hence why we use Object.fromEntries
 						*/
