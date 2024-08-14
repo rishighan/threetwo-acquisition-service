@@ -3,6 +3,7 @@ import { Service, ServiceBroker, ServiceSchema } from "moleculer";
 import { Kafka, EachMessagePayload, logLevel } from "kafkajs";
 import io from "socket.io-client";
 import { isUndefined } from "lodash";
+import stringSimilarity from "string-similarity-alg";
 
 interface SearchResult {
 	result: {
@@ -44,7 +45,26 @@ export default class ComicProcessorService extends Service {
 						day: date.getDate(),
 					};
 				},
-				rankSearchResults: (results, query: string) => {},
+				rankSearchResults: async (results: Map<number, any[]>, query: string) => {
+					// Find the highest-ranked response based on similarity to the search string
+					let highestRankedResult = null;
+					let highestSimilarity = -1;
+
+					results.forEach((resultArray) => {
+						resultArray.forEach((result) => {
+							const similarity = stringSimilarity("jaro-winkler").compare(
+								result.name,
+								query,
+							);
+							if (similarity > highestSimilarity) {
+								highestSimilarity = similarity;
+								highestRankedResult = { ...result, similarity };
+							}
+						});
+					});
+
+					return highestRankedResult;
+				},
 				processJob: async (job: any) => {
 					try {
 						this.logger.info("Processing job:", JSON.stringify(job, null, 2));
@@ -137,12 +157,17 @@ export default class ComicProcessorService extends Service {
 						this.logger.error("Error processing job:", error);
 					}
 				},
-				produceResultsToKafka: async (query: string) => {
+				produceResultsToKafka: async (query: string, result: any[]) => {
 					try {
 						/*
 							Match and rank
 						*/
-
+						const result = await this.rankSearchResults(
+							this.airDCPPSearchResults,
+							query,
+						);
+						console.log("majori");
+						console.log(result);
 						/*
 							Kafka messages need to be in a format that can be serialized to JSON, and a Map is not directly serializable in a way that retains its structure, hence why we use Object.fromEntries
 						*/
@@ -150,9 +175,7 @@ export default class ComicProcessorService extends Service {
 							topic: "comic-search-results",
 							messages: [
 								{
-									value: JSON.stringify(
-										Object.fromEntries(this.airDCPPSearchResults),
-									),
+									value: JSON.stringify(result),
 								},
 							],
 						});
@@ -165,7 +188,7 @@ export default class ComicProcessorService extends Service {
 							args: [
 								{
 									query,
-									results: Object.fromEntries(this.airDCPPSearchResults),
+									result,
 								},
 							],
 						});
@@ -265,6 +288,7 @@ export default class ComicProcessorService extends Service {
 					this.logger.info(
 						`Search complete for query: "${data.searchInfo.query.pattern}"`,
 					);
+
 					await this.produceResultsToKafka(data.searchInfo.query.pattern);
 				});
 			},
