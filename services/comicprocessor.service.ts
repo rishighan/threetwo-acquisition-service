@@ -2,7 +2,7 @@
 import { Service, ServiceBroker, ServiceSchema } from "moleculer";
 import { Kafka, EachMessagePayload, logLevel } from "kafkajs";
 import io from "socket.io-client";
-import { isUndefined } from "lodash";
+import { isNil, isUndefined } from "lodash";
 import stringSimilarity from "string-similarity-alg";
 
 interface SearchResult {
@@ -122,10 +122,10 @@ export default class ComicProcessorService extends Service {
 							await this.broker.call("socket.search", {
 								query: dcppSearchQuery,
 								config: {
-									hostname: "localhost:5600",
+									hostname: "192.168.1.119:5600",
 									protocol: "http",
-									username: "user",
-									password: "pass",
+									username: "admin",
+									password: "password",
 								},
 								namespace: "/automated",
 							});
@@ -257,7 +257,9 @@ export default class ComicProcessorService extends Service {
 						if (!this.airDCPPSearchResults.has(instanceId)) {
 							this.airDCPPSearchResults.set(instanceId, []);
 						}
-						this.airDCPPSearchResults.get(instanceId).push(groupedResult.result);
+						if (!isUndefined(groupedResult?.result)) {
+							this.airDCPPSearchResults.get(instanceId).push(groupedResult.result);
+						}
 					},
 				);
 
