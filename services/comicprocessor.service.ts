@@ -122,10 +122,10 @@ export default class ComicProcessorService extends Service {
 							await this.broker.call("socket.search", {
 								query: dcppSearchQuery,
 								config: {
-									hostname: "192.168.1.119:5600",
+									hostname: "localhost:5600",
 									protocol: "http",
-									username: "admin",
-									password: "password",
+									username: "user",
+									password: "pass",
 								},
 								namespace: "/automated",
 							});
@@ -247,21 +247,19 @@ export default class ComicProcessorService extends Service {
 				});
 
 				// Handle searchResultAdded event
-				this.socketIOInstance.on(
-					"searchResultAdded",
-					({ groupedResult, instanceId }: SearchResultPayload) => {
-						this.logger.info(
-							"Received search result added:",
-							JSON.stringify(groupedResult, null, 4),
-						);
-						if (!this.airDCPPSearchResults.has(instanceId)) {
-							this.airDCPPSearchResults.set(instanceId, []);
-						}
-						if (!isUndefined(groupedResult?.result)) {
-							this.airDCPPSearchResults.get(instanceId).push(groupedResult.result);
-						}
-					},
-				);
+				this.socketIOInstance.on("searchResultAdded", ({ result }: SearchResult) => {
+					console.log(result);
+					this.logger.info(
+						"AirDC++ Search result added:",
+						JSON.stringify(result, null, 4),
+					);
+					// if (!this.airDCPPSearchResults.has(instanceId)) {
+					// 	this.airDCPPSearchResults.set(instanceId, []);
+					// }
+					// if (!isUndefined(groupedResult?.result)) {
+					// 	this.airDCPPSearchResults.get(instanceId).push(groupedResult.result);
+					// }
+				});
 
 				// Handle searchResultUpdated event
 				this.socketIOInstance.on(
