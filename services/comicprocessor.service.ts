@@ -27,9 +27,9 @@ export default class ComicProcessorService extends Service {
 	// @ts-ignore: schema parameter is required by Service constructor
 	constructor(
 		public broker: ServiceBroker,
-		schema: ServiceSchema<{}> = { name: "comicProcessor" },
+		schema: ServiceSchema<object> = { name: "comicProcessor" },
 	) {
-		super(broker);
+		super(broker, schema);
 		this.parseServiceSchema({
 			name: "comicProcessor",
 			methods: {
@@ -158,12 +158,12 @@ export default class ComicProcessorService extends Service {
 						/*
 							Match and rank
 						*/
-						const result = await this.rankSearchResults(
+						const finalResult = await this.rankSearchResults(
 							this.airDCPPSearchResults,
 							query,
 						);
-						console.log(JSON.stringify(result, null, 4));
-						console.log("majori");
+						console.log("Final result:");
+						console.log(JSON.stringify(finalResult, null, 4));
 						/*
 							Kafka messages need to be in a format that can be serialized to JSON, 
 							and a Map is not directly serializable in a way that retains its structure, 
@@ -173,7 +173,7 @@ export default class ComicProcessorService extends Service {
 							topic: "comic-search-results",
 							messages: [
 								{
-									value: JSON.stringify(result),
+									value: JSON.stringify(finalResult),
 								},
 							],
 						});
@@ -186,7 +186,7 @@ export default class ComicProcessorService extends Service {
 							args: [
 								{
 									query,
-									result,
+									finalResult,
 								},
 							],
 						});
