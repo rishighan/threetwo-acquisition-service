@@ -54,28 +54,31 @@ export default class ProwlarrService extends Service {
 					rest: "GET /search",
 					handler: async (
 						ctx: Context<{
-							host: string;
-							port: string;
-							apiKey: string;
-							query: string;
-							type: string;
-							indexerIds: [number];
-							categories: [number];
-							limit: number;
-							offset: number;
+							prowlarrQuery: {
+								host: string;
+								port: string;
+								apiKey: string;
+								query: string;
+								type: string;
+								indexerIds: [number];
+								categories: [number];
+								limit: number;
+								offset: number;
+							};
 						}>,
 					) => {
-						console.log(JSON.stringify(ctx.params, null, 2));
 						const {
-							indexerIds,
-							categories,
-							host,
-							port,
-							apiKey,
-							query,
-							type,
-							limit,
-							offset,
+							prowlarrQuery: {
+								indexerIds,
+								categories,
+								host,
+								port,
+								apiKey,
+								query,
+								type,
+								limit,
+								offset,
+							},
 						} = ctx.params;
 						const indexer = indexerIds[0] ? indexerIds.length === 1 : indexerIds;
 						const category = categories[0] ? categories.length === 1 : categories;

@@ -1,68 +1,114 @@
 "use strict";
-import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
-import axios from "axios";
+import { Kafka } from "kafkajs";
+import type { Context, ServiceBroker, ServiceSchema } from "moleculer";
+import { Errors, Service } from "moleculer";
+
+interface Comic {
+	wanted: {
+		markEntireVolumeWanted?: boolean;
+		issues?: any[];
+		volume: {
+			id: string;
+			name: string;
+		};
+	};
+}
 
 export default class AutoDownloadService extends Service {
+	private kafkaProducer: any;
+
+	private readonly BATCH_SIZE = 100; // Adjust based on your system capacity
+
 	// @ts-ignore
-	public constructor(
+	constructor(
 		public broker: ServiceBroker,
 		schema: ServiceSchema<{}> = { name: "autodownload" },
 	) {
 		super(broker);
 		this.parseServiceSchema({
 			name: "autodownload",
-			mixins: [],
-			hooks: {},
 			actions: {
 				searchWantedComics: {
 					rest: "POST /searchWantedComics",
 					handler: async (ctx: Context<{}>) => {
-						// 1.iterate through the wanted comic objects, and:
-						// 1a. Orchestrate all issues from ComicVine if the entire volume is wanted
-						// 1b. Just the issues in "wanted.issues[]"
-						const wantedComics: any = await this.broker.call(
-							"library.getComicsMarkedAsWanted",
-							{},
-						);
-
-						// Iterate through the list of wanted comics
-						for (const comic of wantedComics) {
-							let issuesToSearch: any = [];
-
-							if (comic.wanted.markEntireVolumeAsWanted) {
-								// 1a. Fetch all issues from ComicVine if the entire volume is wanted
-								issuesToSearch = await this.broker.call(
-									"comicvine.getIssuesForVolume",
-									{
-										volumeId: comic.wanted.volume.id,
-									},
+						try {
+							/* eslint-disable no-await-in-loop */
+							let page = 1;
+							const limit = this.BATCH_SIZE;
+							let comics: Comic[];
+							do {
+								comics = await this.broker.call(
+									"library.getComicsMarkedAsWanted",
+									{ page, limit },
 								);
-							} else if (comic.wanted.issues && comic.wanted.issues.length > 0) {
-								// 1b. Just the issues in "wanted.issues[]"
-								issuesToSearch = comic.wanted.issues;
-							}
-							for (const issue of issuesToSearch) {
-								// construct the search queries
-							}
+								// Log debugging info
+								this.logger.info(
+									"Received comics from getComicsMarkedAsWanted:",
+									JSON.stringify(comics, null, 2),
+								);
+								if (!Array.isArray(comics)) {
+									this.logger.error(
+										"Invalid response structure",
+										JSON.stringify(comics, null, 2),
+									);
+									throw new Errors.MoleculerError(
+										"Invalid response structure from getComicsMarkedAsWanted",
+										500,
+										"INVALID_RESPONSE_STRUCTURE",
+									);
+								}
+								this.logger.info(
+									`Fetched ${comics.length} comics from page ${page}`,
+								);
+								for (const comic of comics) {
+									await this.produceJobToKafka(comic);
+								}
+								page += 1;
+							} while (comics.length === limit);
+
+							return {
+								success: true,
+								message: "Jobs enqueued for background processing.",
+							};
+						} catch (error) {
+							this.logger.error("Error in searchWantedComics:", error);
+							throw new Errors.MoleculerError(
+								"Failed to search wanted comics.",
+								500,
+								"SEARCH_WANTED_COMICS_ERROR",
+								{ error },
+							);
 						}
 					},
 				},
-				determineDownloadChannel: {
-					rest: "POST /determineDownloadChannel",
-					handler: async (ctx: Context<{}>) => {
-						// 1. Parse the incoming search query
-						// to make sure that it is well-formed
-						// At the very least, it should have name, year, number
-						// 2. Choose between download mediums based on user-preference?
-						// possible choices are: DC++, Torrent
-						// 3. Perform the search on those media with the aforementioned search query
-						// 4. Choose a subset of relevant search results,
-						// and score them
-						// 5. Download the highest-scoring, relevant result
-					},
+			},
+			methods: {
+				produceJobToKafka: async (comic: Comic) => {
+					const job = { comic };
+					try {
+						await this.kafkaProducer.send({
+							topic: "comic-search-jobs",
+							messages: [{ value: JSON.stringify(job) }],
+						});
+						this.logger.info("Produced job to Kafka:", job);
+					} catch (error) {
+						this.logger.error("Error producing job to Kafka:", error);
+					}
 				},
 			},
-			methods: {},
+			async started() {
+				const kafka = new Kafka({
+					clientId: "comic-search-service",
+					brokers: ["localhost:9092"],
+				});
+				this.kafkaProducer = kafka.producer();
+				await this.kafkaProducer.connect();
+				this.logger.info("Kafka producer connected successfully.");
+			},
+			async stopped() {
+				await this.kafkaProducer.disconnect();
+				this.logger.info("Kafka producer disconnected successfully.");
+			},
 		});
 	}
 }
