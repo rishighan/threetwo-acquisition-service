@@ -162,8 +162,6 @@ export default class ComicProcessorService extends Service {
 							this.airDCPPSearchResults,
 							query,
 						);
-						console.log("Final result:");
-						console.log(JSON.stringify(finalResult, null, 4));
 						/*
 							Kafka messages need to be in a format that can be serialized to JSON, 
 							and a Map is not directly serializable in a way that retains its structure, 
@@ -177,7 +175,7 @@ export default class ComicProcessorService extends Service {
 								},
 							],
 						});
-						console.log(`Produced results to Kafka.`);
+						this.logger.info(`Produced results to Kafka.`);
 
 						// socket event for UI
 						await this.broker.call("socket.broadcast", {
@@ -260,8 +258,6 @@ export default class ComicProcessorService extends Service {
 						this.airDCPPSearchResults.get(entityId).push(payload);
 					}
 
-					console.log(typeof entityId, entityId);
-					console.log(entityId);
 					console.log(
 						"Updated airDCPPSearchResults:",
 						JSON.stringify(Array.from(this.airDCPPSearchResults.entries()), null, 4),
@@ -278,15 +274,15 @@ export default class ComicProcessorService extends Service {
 
 					if (resultsForInstance) {
 						const toReplaceIndex = resultsForInstance.findIndex((element: any) => {
-							console.log("search result updated!");
-							console.log(JSON.stringify(element, null, 4));
+							this.logger.info("search result updated!");
+							this.logger.info(JSON.stringify(element, null, 4));
 							return element.id === payload.id;
 						});
 
 						if (toReplaceIndex !== -1) {
 							// Replace the existing result with the updated result
 							resultsForInstance[toReplaceIndex] = payload;
-
+rty6j
 							// Optionally, update the map with the modified array
 							this.airDCPPSearchResults.set(entityId, resultsForInstance);
 						}

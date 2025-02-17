@@ -1,11 +1,12 @@
 "use strict";
-import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
 import { Kafka } from "kafkajs";
+import type { Context, ServiceBroker, ServiceSchema } from "moleculer";
+import { Errors, Service } from "moleculer";
 
 interface Comic {
 	wanted: {
 		markEntireVolumeWanted?: boolean;
-		issues?: Array<any>;
+		issues?: any[];
 		volume: {
 			id: string;
 			name: string;
@@ -15,10 +16,11 @@ interface Comic {
 
 export default class AutoDownloadService extends Service {
 	private kafkaProducer: any;
+
 	private readonly BATCH_SIZE = 100; // Adjust based on your system capacity
 
 	// @ts-ignore
-	public constructor(
+	constructor(
 		public broker: ServiceBroker,
 		schema: ServiceSchema<{}> = { name: "autodownload" },
 	) {
@@ -30,22 +32,20 @@ export default class AutoDownloadService extends Service {
 					rest: "POST /searchWantedComics",
 					handler: async (ctx: Context<{}>) => {
 						try {
+							/* eslint-disable no-await-in-loop */
 							let page = 1;
 							const limit = this.BATCH_SIZE;
-
-							while (true) {
-								const comics: Comic[] = await this.broker.call(
+							let comics: Comic[];
+							do {
+								comics = await this.broker.call(
 									"library.getComicsMarkedAsWanted",
 									{ page, limit },
 								);
-
-								// Log the entire result object for debugging
+								// Log debugging info
 								this.logger.info(
 									"Received comics from getComicsMarkedAsWanted:",
 									JSON.stringify(comics, null, 2),
 								);
-
-								// Check if result structure is correct
 								if (!Array.isArray(comics)) {
 									this.logger.error(
 										"Invalid response structure",
@@ -57,19 +57,14 @@ export default class AutoDownloadService extends Service {
 										"INVALID_RESPONSE_STRUCTURE",
 									);
 								}
-
 								this.logger.info(
 									`Fetched ${comics.length} comics from page ${page}`,
 								);
-
-								// Enqueue the jobs in batches
 								for (const comic of comics) {
 									await this.produceJobToKafka(comic);
 								}
-
-								if (comics.length < limit) break; // End loop if fewer comics than the limit were fetched
 								page += 1;
-							}
+							} while (comics.length === limit);
 
 							return {
 								success: true,
