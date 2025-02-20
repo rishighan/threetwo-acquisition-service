@@ -282,7 +282,6 @@ export default class ComicProcessorService extends Service {
 						if (toReplaceIndex !== -1) {
 							// Replace the existing result with the updated result
 							resultsForInstance[toReplaceIndex] = payload;
-rty6j
 							// Optionally, update the map with the modified array
 							this.airDCPPSearchResults.set(entityId, resultsForInstance);
 						}
