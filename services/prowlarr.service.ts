@@ -1,10 +1,10 @@
-"use strict";
+
 import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
 import axios from "axios";
 
 export default class ProwlarrService extends Service {
 	// @ts-ignore
-	public constructor(
+	constructor(
 		public broker: ServiceBroker,
 		schema: ServiceSchema<{}> = { name: "prowlarr" },
 	) {
