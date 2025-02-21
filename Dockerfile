@@ -8,6 +8,9 @@ COPY package.json package-lock.json ./
 COPY moleculer.config.ts ./
 COPY tsconfig.json ./
 
+RUN apt-get update && apt-get install -y \
+	bash 
+
 # Install application dependencies
 RUN npm install
 RUN npm install -g typescript ts-node
