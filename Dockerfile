@@ -6,6 +6,10 @@ WORKDIR /acquisition-service
 # Install dependencies
 COPY package.json package-lock.json ./
 
+# Install application dependencies
+RUN npm install
+RUN npm install -g typescript ts-node
+
 # Copy source
 COPY . .
 
