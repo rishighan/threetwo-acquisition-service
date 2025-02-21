@@ -5,7 +5,6 @@ LABEL maintainer="Rishi Ghan <rishi.ghan@gmail.com>"
 WORKDIR /acquisition-service
 # Install dependencies
 COPY package.json package-lock.json ./
-RUN npm ci --silent
 
 # Copy source
 COPY . .
