@@ -5,6 +5,8 @@ LABEL maintainer="Rishi Ghan <rishi.ghan@gmail.com>"
 WORKDIR /acquisition-service
 # Install dependencies
 COPY package.json package-lock.json ./
+COPY moleculer.config.ts ./
+COPY tsconfig.json ./
 
 # Install application dependencies
 RUN npm install
