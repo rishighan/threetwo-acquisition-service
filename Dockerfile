@@ -6,10 +6,7 @@ WORKDIR /acquisition-service
 # Install dependencies
 COPY package.json package-lock.json ./
 COPY moleculer.config.ts ./
-COPY tsconfig.json ./
-
-RUN apt-get update && apt-get install -y \
-	bash 
+COPY tsconfig.build.json ./
 
 # Install application dependencies
 RUN npm install
