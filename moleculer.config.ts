@@ -1,5 +1,10 @@
-import type { BrokerOptions, MetricRegistry, ServiceBroker } from "moleculer";
-import { Errors } from "moleculer";
+"use strict";
+import {
+	BrokerOptions,
+	Errors,
+	MetricRegistry,
+	ServiceBroker,
+} from "moleculer";
 
 /**
  * Moleculer ServiceBroker configuration file
@@ -30,7 +35,7 @@ const brokerConfig: BrokerOptions = {
 	// Namespace of nodes to segment your nodes on the same network.
 	namespace: "",
 	// Unique node identifier. Must be unique in a namespace.
-	nodeID: "threetwo-acquistion-service",
+	nodeID: "threetwo-metadata-service",
 	// Custom metadata store. Store here what you want. Accessing: `this.broker.metadata`
 	metadata: {},
 
@@ -42,7 +47,7 @@ const brokerConfig: BrokerOptions = {
 			// Using colors on the output
 			colors: true,
 			// Print module names with different colors (like docker-compose for containers)
-			moduleColors: false,
+			moduleColors: true,
 			// Line formatter. It can be "json", "short", "simple", "full", a `Function` or a template string like "{timestamp} {level} {nodeID}/{mod}: {msg}"
 			formatter: "full",
 			// Custom object printer. If not defined, it uses the `util.inspect` method.
@@ -59,11 +64,11 @@ const brokerConfig: BrokerOptions = {
 	// More info: https://moleculer.services/docs/0.14/networking.html
 	// Note: During the development, you don't need to define it because all services will be loaded locally.
 	// In production you can set it via `TRANSPORTER=nats://localhost:4222` environment variable.
-	transporter: process.env.REDIS_URI || "redis://localhost:6379",
+	transporter: process.env.REDIS_URI || "redis://localhost:6379", // "NATS"
 
 	// Define a cacher.
 	// More info: https://moleculer.services/docs/0.14/caching.html
-	cacher: "Redis",
+	cacher: "Memory",
 
 	// Define a serializer.
 	// Available values: "JSON", "Avro", "ProtoBuf", "MsgPack", "Notepack", "Thrift".
@@ -86,8 +91,7 @@ const brokerConfig: BrokerOptions = {
 		// Backoff factor for delay. 2 means exponential backoff.
 		factor: 2,
 		// A function to check failed requests.
-		check: (err: Error) =>
-			err && err instanceof Errors.MoleculerRetryableError && !!err.retryable,
+		check: (err: Errors.MoleculerError) => err && !!err.retryable,
 	},
 
 	// Limit of calling level. If it reaches the limit, broker will throw an MaxCallLevelError error. (Infinite loop protection)
@@ -134,7 +138,7 @@ const brokerConfig: BrokerOptions = {
 		// Number of milliseconds to switch from open to half-open state
 		halfOpenTime: 10 * 1000,
 		// A function to check failed requests.
-		check: (err: Error) => err && err instanceof Errors.MoleculerError && err.code >= 500,
+		check: (err: Errors.MoleculerError) => err && err.code >= 500,
 	},
 
 	// Settings of bulkhead feature. More info: https://moleculer.services/docs/0.14/fault-tolerance.html#Bulkhead
@@ -195,16 +199,13 @@ const brokerConfig: BrokerOptions = {
 	middlewares: [],
 
 	// Register custom REPL commands.
-	replCommands: null,
-
+	/*
 	// Called after broker created.
-	// created(broker: ServiceBroker): void {},
-
+	created : (broker: ServiceBroker): void => {},
 	// Called after broker started.
-	// async started(broker: ServiceBroker): Promise<void> {},
-
-	// Called after broker stopped.
-	// async stopped(broker: ServiceBroker): Promise<void> {},
+	started: async (broker: ServiceBroker): Promise<void> => {},
+	stopped: async (broker: ServiceBroker): Promise<void> => {},
+	 */
 };
 
 export = brokerConfig;
