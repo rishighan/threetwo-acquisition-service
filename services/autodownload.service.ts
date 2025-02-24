@@ -99,7 +99,7 @@ export default class AutoDownloadService extends Service {
 			async started() {
 				const kafka = new Kafka({
 					clientId: "comic-search-service",
-					brokers: ["localhost:9092"],
+					brokers: [process.env.KAFKA_BROKER_URI],
 				});
 				this.kafkaProducer = kafka.producer();
 				await this.kafkaProducer.connect();

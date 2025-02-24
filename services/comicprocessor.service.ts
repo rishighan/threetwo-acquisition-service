@@ -196,7 +196,7 @@ export default class ComicProcessorService extends Service {
 			async started() {
 				const kafka = new Kafka({
 					clientId: "comic-processor-service",
-					brokers: ["localhost:9092"],
+					brokers: [process.env.KAFKA_BROKER_URI],
 					logLevel: logLevel.INFO,
 				});
 				this.kafkaConsumer = kafka.consumer({ groupId: "comic-processor-group" });
