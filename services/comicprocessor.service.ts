@@ -13,15 +13,10 @@ interface SearchResult {
 
 export default class ComicProcessorService extends Service {
 	private kafkaConsumer: any;
-
 	private socketIOInstance: any;
-
 	private kafkaProducer: any;
-
 	private prowlarrResultsMap: Map<string, any> = new Map();
-
 	private airDCPPSearchResults: Map<number, any[]> = new Map();
-
 	private issuesToSearch: any = [];
 
 	// @ts-ignore: schema parameter is required by Service constructor
