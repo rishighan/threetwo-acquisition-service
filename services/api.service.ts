@@ -1,4 +1,3 @@
-import fs from "fs";
 import { Service, ServiceBroker } from "moleculer";
 import ApiGateway from "moleculer-web";
 
@@ -46,9 +45,60 @@ export default class ApiService extends Service {
 					},
 
 					{
-						path: "/logs",
-						use: [ApiGateway.serveStatic("logs")],
+					path: "/acquisition-graphql",
+					whitelist: ["acquisition-graphql.query"],
+					cors: {
+						origin: "*",
+						methods: ["GET", "POST", "OPTIONS"],
+						allowedHeaders: ["*"],
+						credentials: false,
+						maxAge: 3600,
 					},
+					aliases: {
+						"POST /": async (req: any, res: any) => {
+							try {
+								const { query, variables, operationName } = req.body;
+								const result = await req.$ctx.broker.call("acquisition-graphql.query", {
+									query,
+									variables,
+									operationName,
+								});
+								res.setHeader("Content-Type", "application/json");
+								res.end(JSON.stringify(result));
+							} catch (error: any) {
+								res.statusCode = 500;
+								res.setHeader("Content-Type", "application/json");
+								res.end(JSON.stringify({ errors: [{ message: error.message }] }));
+							}
+						},
+						"GET /": async (req: any, res: any) => {
+							try {
+								const query = req.$params.query;
+								const variables = req.$params.variables ? JSON.parse(req.$params.variables) : undefined;
+								const operationName = req.$params.operationName;
+								const result = await req.$ctx.broker.call("acquisition-graphql.query", {
+									query,
+									variables,
+									operationName,
+								});
+								res.setHeader("Content-Type", "application/json");
+								res.end(JSON.stringify(result));
+							} catch (error: any) {
+								res.statusCode = 500;
+								res.setHeader("Content-Type", "application/json");
+								res.end(JSON.stringify({ errors: [{ message: error.message }] }));
+							}
+						},
+					},
+					bodyParsers: { json: { strict: false, limit: "1MB" } },
+					mappingPolicy: "restrict",
+					logging: true,
+				},
+
+				{
+					path: "/logs",
+					use: [ApiGateway.serveStatic("logs")],
+				},
 				],
 				log4XXResponses: false,
 				logRequestParams: true,
