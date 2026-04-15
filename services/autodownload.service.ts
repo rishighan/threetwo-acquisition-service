@@ -1,12 +1,17 @@
-"use strict";
+import type { Producer } from "kafkajs";
 import { Kafka } from "kafkajs";
-import type { Context, ServiceBroker, ServiceSchema } from "moleculer";
+import type { Context, ServiceBroker } from "moleculer";
 import { Errors, Service } from "moleculer";
+
+interface Issue {
+	id: string;
+	number: number;
+}
 
 interface Comic {
 	wanted: {
 		markEntireVolumeWanted?: boolean;
-		issues?: any[];
+		issues?: Issue[];
 		volume: {
 			id: string;
 			name: string;
@@ -15,22 +20,20 @@ interface Comic {
 }
 
 export default class AutoDownloadService extends Service {
-	private kafkaProducer: any;
+	private kafkaProducer!: Producer;
 
-	private readonly BATCH_SIZE = 100; // Adjust based on your system capacity
+	private readonly BATCH_SIZE = 100;
 
-	// @ts-ignore
-	constructor(
-		public broker: ServiceBroker,
-		schema: ServiceSchema<{}> = { name: "autodownload" },
-	) {
+	// @ts-ignore -- Moleculer requires this constructor signature for service instantiation
+	constructor(broker: ServiceBroker) {
 		super(broker);
 		this.parseServiceSchema({
 			name: "autodownload",
 			actions: {
 				searchWantedComics: {
 					rest: "POST /searchWantedComics",
-					handler: async (ctx: Context<{}>) => {
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					handler: async (ctx: Context<Record<string, never>>) => {
 						try {
 							/* eslint-disable no-await-in-loop */
 							let page = 1;
@@ -99,7 +102,7 @@ export default class AutoDownloadService extends Service {
 			async started() {
 				const kafka = new Kafka({
 					clientId: "comic-search-service",
-					brokers: [process.env.KAFKA_BROKER_URI],
+					brokers: [process.env.KAFKA_BROKER_URI || "localhost:9092"],
 				});
 				this.kafkaProducer = kafka.producer();
 				await this.kafkaProducer.connect();

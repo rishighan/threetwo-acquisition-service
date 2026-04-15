@@ -1,5 +1,27 @@
-import { Service, ServiceBroker } from "moleculer";
+import type { IncomingMessage, ServerResponse } from "http";
+import type { ServiceBroker } from "moleculer";
+import { Service } from "moleculer";
 import ApiGateway from "moleculer-web";
+
+interface GraphQLRequest extends IncomingMessage {
+	body: {
+		query: string;
+		variables?: Record<string, unknown>;
+		operationName?: string;
+	};
+	$params: {
+		query?: string;
+		variables?: string;
+		operationName?: string;
+	};
+	$ctx: {
+		broker: ServiceBroker;
+	};
+}
+
+interface GraphQLError {
+	message: string;
+}
 
 export default class ApiService extends Service {
 	constructor(broker: ServiceBroker) {
@@ -55,7 +77,8 @@ export default class ApiService extends Service {
 						maxAge: 3600,
 					},
 					aliases: {
-						"POST /": async (req: any, res: any) => {
+						// eslint-disable-next-line @typescript-eslint/naming-convention
+						"POST /": async (req: GraphQLRequest, res: ServerResponse) => {
 							try {
 								const { query, variables, operationName } = req.body;
 								const result = await req.$ctx.broker.call("acquisition-graphql.query", {
@@ -65,17 +88,17 @@ export default class ApiService extends Service {
 								});
 								res.setHeader("Content-Type", "application/json");
 								res.end(JSON.stringify(result));
-							} catch (error: any) {
+							} catch (error: unknown) {
 								res.statusCode = 500;
 								res.setHeader("Content-Type", "application/json");
-								res.end(JSON.stringify({ errors: [{ message: error.message }] }));
+								res.end(JSON.stringify({ errors: [{ message: (error as GraphQLError).message }] }));
 							}
 						},
-						"GET /": async (req: any, res: any) => {
+						// eslint-disable-next-line @typescript-eslint/naming-convention
+						"GET /": async (req: GraphQLRequest, res: ServerResponse) => {
 							try {
-								const query = req.$params.query;
-								const variables = req.$params.variables ? JSON.parse(req.$params.variables) : undefined;
-								const operationName = req.$params.operationName;
+								const { query, variables: variablesStr, operationName } = req.$params;
+								const variables = variablesStr ? JSON.parse(variablesStr) : undefined;
 								const result = await req.$ctx.broker.call("acquisition-graphql.query", {
 									query,
 									variables,
@@ -83,10 +106,10 @@ export default class ApiService extends Service {
 								});
 								res.setHeader("Content-Type", "application/json");
 								res.end(JSON.stringify(result));
-							} catch (error: any) {
+							} catch (error: unknown) {
 								res.statusCode = 500;
 								res.setHeader("Content-Type", "application/json");
-								res.end(JSON.stringify({ errors: [{ message: error.message }] }));
+								res.end(JSON.stringify({ errors: [{ message: (error as GraphQLError).message }] }));
 							}
 						},
 					},
@@ -112,7 +135,7 @@ export default class ApiService extends Service {
 			events: {},
 
 			methods: {},
-			started(): any {},
+			started(): void {},
 		});
 	}
 }

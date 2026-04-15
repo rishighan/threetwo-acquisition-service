@@ -1,13 +1,32 @@
-
-import { Context, Service, ServiceBroker, ServiceSchema, Errors } from "moleculer";
 import axios from "axios";
+import type { Context, ServiceBroker } from "moleculer";
+import { Service } from "moleculer";
+
+interface ConnectParams {
+	host: string;
+	port: string;
+	apiKey: string;
+}
+
+interface ProwlarrQuery {
+	host: string;
+	port: string;
+	apiKey: string;
+	query: string;
+	type: string;
+	indexerIds: number[];
+	categories: number[];
+	limit: number;
+	offset: number;
+}
+
+interface SearchParams {
+	prowlarrQuery: ProwlarrQuery;
+}
 
 export default class ProwlarrService extends Service {
-	// @ts-ignore
-	constructor(
-		public broker: ServiceBroker,
-		schema: ServiceSchema<{}> = { name: "prowlarr" },
-	) {
+	// @ts-ignore -- Moleculer requires this constructor signature for service instantiation
+	constructor(broker: ServiceBroker) {
 		super(broker);
 		this.parseServiceSchema({
 			name: "prowlarr",
@@ -16,13 +35,7 @@ export default class ProwlarrService extends Service {
 			actions: {
 				connect: {
 					rest: "POST /connect",
-					handler: async (
-						ctx: Context<{
-							host: string;
-							port: string;
-							apiKey: string;
-						}>,
-					) => {
+					handler: async (ctx: Context<ConnectParams>) => {
 						const { host, port, apiKey } = ctx.params;
 						const result = await axios.request({
 							url: `http://${host}:${port}/api`,
@@ -31,14 +44,12 @@ export default class ProwlarrService extends Service {
 								"X-Api-Key": apiKey,
 							},
 						});
-						console.log(result.data);
+						this.logger.info(result.data);
 					},
 				},
 				getIndexers: {
 					rest: "GET /indexers",
-					handler: async (
-						ctx: Context<{ host: string; port: string; apiKey: string }>,
-					) => {
+					handler: async (ctx: Context<ConnectParams>) => {
 						const { host, port, apiKey } = ctx.params;
 						const result = await axios.request({
 							url: `http://${host}:${port}/api/v1/indexer`,
@@ -52,21 +63,7 @@ export default class ProwlarrService extends Service {
 				},
 				search: {
 					rest: "GET /search",
-					handler: async (
-						ctx: Context<{
-							prowlarrQuery: {
-								host: string;
-								port: string;
-								apiKey: string;
-								query: string;
-								type: string;
-								indexerIds: [number];
-								categories: [number];
-								limit: number;
-								offset: number;
-							};
-						}>,
-					) => {
+					handler: async (ctx: Context<SearchParams>) => {
 						const {
 							prowlarrQuery: {
 								indexerIds,
@@ -103,7 +100,8 @@ export default class ProwlarrService extends Service {
 				},
 				ping: {
 					rest: "GET /ping",
-					handler: async (ctx: Context<{}>) => {
+					// eslint-disable-next-line @typescript-eslint/no-unused-vars
+					handler: async (ctx: Context<Record<string, never>>) => {
 						const foo = await axios.request({
 							url: "http://192.168.1.183:9696/ping",
 							method: "GET",
@@ -112,7 +110,7 @@ export default class ProwlarrService extends Service {
 								"X-Api-Key": "163ef9a683874f65b53c7be87354b38b",
 							},
 						});
-						console.log(foo.data);
+						this.logger.info(foo.data);
 						return true;
 					},
 				},

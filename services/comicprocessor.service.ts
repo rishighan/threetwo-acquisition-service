@@ -1,30 +1,90 @@
-import type { EachMessagePayload } from "kafkajs";
+import type { Consumer, EachMessagePayload, Producer } from "kafkajs";
 import { Kafka, logLevel } from "kafkajs";
-import { isNil, isUndefined } from "lodash";
+import { isNil } from "lodash";
 import type { ServiceBroker, ServiceSchema } from "moleculer";
 import { Service } from "moleculer";
+import type { Socket } from "socket.io-client";
 import io from "socket.io-client";
 import stringSimilarity from "string-similarity-alg";
 
+interface SearchPayload {
+	id: string;
+	name: string;
+}
+
 interface SearchResult {
-	groupedResult: { entityId: number; payload: any };
-	updatedResult: { entityId: number; payload: any };
+	groupedResult: { entityId: number; payload: SearchPayload };
+	updatedResult: { entityId: number; payload: SearchPayload };
+}
+
+interface Issue {
+	issueNumber?: string;
+	issue_number?: string;
+	coverDate?: string;
+	year?: number;
+}
+
+interface Volume {
+	id: string;
+	name: string;
+}
+
+interface Comic {
+	wanted: {
+		volume: Volume;
+		issues?: Issue[];
+		markEntireVolumeWanted?: boolean;
+	};
+}
+
+interface Job {
+	comic: Comic;
+}
+
+interface Hub {
+	value: string;
+}
+
+interface DirectConnectSettings {
+	client: {
+		hubs: Hub[];
+	};
+}
+
+interface SearchInfo {
+	query: {
+		pattern: string;
+	};
+}
+
+interface SearchesSentData {
+	searchInfo: SearchInfo;
+}
+
+interface RankedResult extends SearchPayload {
+	similarity: number;
 }
 
 export default class ComicProcessorService extends Service {
-	private kafkaConsumer: any;
-	private socketIOInstance: any;
-	private kafkaProducer: any;
-	private prowlarrResultsMap: Map<string, any> = new Map();
-	private airDCPPSearchResults: Map<number, any[]> = new Map();
-	private issuesToSearch: any = [];
+	private kafkaConsumer!: Consumer;
 
-	// @ts-ignore: schema parameter is required by Service constructor
+	private socketIOInstance!: Socket;
+
+	private kafkaProducer!: Producer;
+
+	private prowlarrResultsMap: Map<string, unknown> = new Map();
+
+	private airDCPPSearchResults: Map<number, SearchPayload[]> = new Map();
+
+	private issuesToSearch: Issue[] = [];
+
+	// @ts-ignore -- Moleculer requires this constructor signature for service instantiation
 	constructor(
-		public broker: ServiceBroker,
+		broker: ServiceBroker,
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		schema: ServiceSchema<object> = { name: "comicProcessor" },
 	) {
-		super(broker, schema);
+		super(broker);
 		this.parseServiceSchema({
 			name: "comicProcessor",
 			methods: {
@@ -36,9 +96,9 @@ export default class ComicProcessorService extends Service {
 						day: date.getDate(),
 					};
 				},
-				rankSearchResults: async (results: Map<number, any[]>, query: string) => {
+				rankSearchResults: (results: Map<number, SearchPayload[]>, query: string): RankedResult | null => {
 					// Find the highest-ranked response based on similarity to the search string
-					let highestRankedResult = null;
+					let highestRankedResult: RankedResult | null = null;
 					let highestSimilarity = -1;
 
 					results.forEach((resultArray) => {
@@ -56,24 +116,25 @@ export default class ComicProcessorService extends Service {
 
 					return highestRankedResult;
 				},
-				processJob: async (job: any) => {
+				processJob: async (job: Job) => {
 					try {
 						this.logger.info("Processing job:", JSON.stringify(job, null, 2));
 						// Get the hub to search on
-						const settings: any = await this.broker.call("settings.getSettings", {
+						const settings: DirectConnectSettings = await this.broker.call("settings.getSettings", {
 							settingsKey: "directConnect",
 						});
-						const hubs = settings.client.hubs.map((hub: any) => hub.value);
+						const hubs = settings.client.hubs.map((hub: Hub) => hub.value);
 
 						const { comic } = job;
 						const { volume, issues, markEntireVolumeWanted } = comic.wanted;
 
 						// If entire volume is marked as wanted, get their details from CV
 						if (markEntireVolumeWanted) {
-							this.issuesToSearch = await this.broker.call(
+							const fetchedIssues: Issue[] = await this.broker.call(
 								"comicvine.getIssuesForVolume",
 								{ volumeId: volume.id },
 							);
+							this.issuesToSearch = fetchedIssues;
 							this.logger.info(
 								`The entire volume with id: ${volume.id} was marked as wanted.`,
 							);
@@ -81,17 +142,18 @@ export default class ComicProcessorService extends Service {
 							this.logger.info(`${this.issuesToSearch.length} issues to search`);
 						} else {
 							// Or proceed with `issues` from the wanted object.
-							this.issuesToSearch = issues;
+							this.issuesToSearch = issues || [];
 						}
 
+						/* eslint-disable no-await-in-loop */
 						for (const issue of this.issuesToSearch) {
 							// Query builder for DC++
 							// 1. issue number
-							const inferredIssueNumber =
+							const issueNumber =
 								issue.issueNumber || issue.issue_number || "";
 							// 2. year
-							const { year } = this.parseStringDate(issue.coverDate);
-							const inferredYear = year || issue.year || "";
+							const { year } = this.parseStringDate(issue.coverDate || "");
+							const issueYear = year || issue.year || "";
 
 							// 3. Orchestrate the query
 							const dcppSearchQuery = {
@@ -109,6 +171,7 @@ export default class ComicProcessorService extends Service {
 								"DC++ search query:",
 								JSON.stringify(dcppSearchQuery, null, 4),
 							);
+							this.logger.debug(`Issue number: ${issueNumber}, Year: ${issueYear}`);
 
 							await this.broker.call("socket.search", {
 								query: dcppSearchQuery,
@@ -120,40 +183,18 @@ export default class ComicProcessorService extends Service {
 								},
 								namespace: "/automated",
 							});
-
-							// 							const prowlarrResults = await this.broker.call("prowlarr.search", {
-							// 								prowlarrQuery: {
-							// 									port: "9696",
-							// 									apiKey: "c4f42e265fb044dc81f7e88bd41c3367",
-							// 									offset: 0,
-							// 									categories: [7030],
-							// 									query: `${volume.name} ${issue.issueNumber} ${year}`,
-							// 									host: "localhost",
-							// 									limit: 100,
-							// 									type: "search",
-							// 									indexerIds: [2],
-							// 								},
-							// 							});
-							//
-							// 							this.logger.info(
-							// 								"Prowlarr search results:",
-							// 								JSON.stringify(prowlarrResults, null, 4),
-							// 							);
-
-							// Store prowlarr results in map using unique key
-							// const key = `${volume.name}-${issue.issueNumber}-${year}`;
-							// this.prowlarrResultsMap.set(key, prowlarrResults);
 						}
+						/* eslint-enable no-await-in-loop */
 					} catch (error) {
 						this.logger.error("Error processing job:", error);
 					}
 				},
-				produceResultsToKafka: async (query: string, result: any[]): Promise<void> => {
+				produceResultsToKafka: async (query: string): Promise<void> => {
 					try {
 						/*
 							Match and rank
 						*/
-						const finalResult = await this.rankSearchResults(
+						const finalResult = this.rankSearchResults(
 							this.airDCPPSearchResults,
 							query,
 						);
@@ -191,13 +232,13 @@ export default class ComicProcessorService extends Service {
 			async started() {
 				const kafka = new Kafka({
 					clientId: "comic-processor-service",
-					brokers: [process.env.KAFKA_BROKER_URI],
+					brokers: [process.env.KAFKA_BROKER_URI || "localhost:9092"],
 					logLevel: logLevel.INFO,
 				});
 				this.kafkaConsumer = kafka.consumer({ groupId: "comic-processor-group" });
 				this.kafkaProducer = kafka.producer();
 
-				this.kafkaConsumer.on("consumer.crash", (event: any) => {
+				this.kafkaConsumer.on("consumer.crash", (event: { payload: Error }) => {
 					this.logger.error("Consumer crash:", event);
 				});
 				this.kafkaConsumer.on("consumer.connect", () => {
@@ -219,9 +260,9 @@ export default class ComicProcessorService extends Service {
 				});
 
 				await this.kafkaConsumer.run({
-					eachMessage: async ({ topic, partition, message }: EachMessagePayload) => {
+					eachMessage: async ({ message }: EachMessagePayload) => {
 						if (message.value) {
-							const job = JSON.parse(message.value.toString());
+							const job = JSON.parse(message.value.toString()) as Job;
 							await this.processJob(job);
 						} else {
 							this.logger.warn("Received message with null value");
@@ -250,14 +291,17 @@ export default class ComicProcessorService extends Service {
 						this.airDCPPSearchResults.set(entityId, []);
 					}
 					if (!isNil(payload)) {
-						this.airDCPPSearchResults.get(entityId).push(payload);
+						const results = this.airDCPPSearchResults.get(entityId);
+						if (results) {
+							results.push(payload);
+						}
 					}
 
-					console.log(
+					this.logger.info(
 						"Updated airDCPPSearchResults:",
 						JSON.stringify(Array.from(this.airDCPPSearchResults.entries()), null, 4),
 					);
-					console.log(JSON.stringify(payload, null, 4));
+					this.logger.info(JSON.stringify(payload, null, 4));
 				});
 
 				// Handle searchResultUpdated event
@@ -268,7 +312,7 @@ export default class ComicProcessorService extends Service {
 					const resultsForInstance = this.airDCPPSearchResults.get(entityId);
 
 					if (resultsForInstance) {
-						const toReplaceIndex = resultsForInstance.findIndex((element: any) => {
+						const toReplaceIndex = resultsForInstance.findIndex((element: SearchPayload) => {
 							this.logger.info("search result updated!");
 							this.logger.info(JSON.stringify(element, null, 4));
 							return element.id === payload.id;
@@ -284,7 +328,7 @@ export default class ComicProcessorService extends Service {
 				});
 
 				// Handle searchComplete event
-				this.socketIOInstance.on("searchesSent", async (data: any) => {
+				this.socketIOInstance.on("searchesSent", async (data: SearchesSentData) => {
 					this.logger.info(
 						`Search complete for query: "${data.searchInfo.query.pattern}"`,
 					);

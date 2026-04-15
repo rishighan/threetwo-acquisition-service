@@ -1,13 +1,21 @@
-import { Service, ServiceBroker } from "moleculer";
-import { graphql, GraphQLSchema } from "graphql";
 import { makeExecutableSchema } from "@graphql-tools/schema";
-import { typeDefs } from "../models/graphql/typedef";
+import type { GraphQLSchema } from "graphql";
+import { graphql } from "graphql";
+import type { Context, ServiceBroker } from "moleculer";
+import { Service } from "moleculer";
 import { resolvers } from "../models/graphql/resolvers";
+import { typeDefs } from "../models/graphql/typedef";
+
+interface GraphQLParams {
+	query: string;
+	variables?: Record<string, unknown>;
+	operationName?: string;
+}
 
 export default class GraphQLService extends Service {
 	private graphqlSchema!: GraphQLSchema;
 
-	public constructor(broker: ServiceBroker) {
+	constructor(broker: ServiceBroker) {
 		super(broker);
 		this.parseServiceSchema({
 			name: "acquisition-graphql",
@@ -19,7 +27,7 @@ export default class GraphQLService extends Service {
 						variables: { type: "object", optional: true },
 						operationName: { type: "string", optional: true },
 					},
-					async handler(ctx: any) {
+					async handler(ctx: Context<GraphQLParams>) {
 						const { query, variables, operationName } = ctx.params;
 						return graphql({
 							schema: this.graphqlSchema,
